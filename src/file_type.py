@@ -47,6 +47,8 @@ def extract_file_from_request(request: IngestRequest) -> ExtractedFile:
         text_bytes = request.text.encode("utf-8")
         size_in_bytes = len(text_bytes)
         file_stream = BytesIO(text_bytes)
+        mime_type = "text/plain"
+        extension = "txt"
 
     if file_name:
         extension = file_name.split(".")[-1]
