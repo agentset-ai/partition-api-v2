@@ -31,6 +31,8 @@ class ParseOptions(BaseModel):
 
 class ChunkOptions(BaseModel):
     chunk_size: int = 2048
+    # if available, we'll split the text using delimiters before chunking to ensure they don't overlap
+    delimiter: str | None = None
     language_code: (
         Literal[
             "af",

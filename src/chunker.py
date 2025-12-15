@@ -166,8 +166,18 @@ def chunk_documents(
 
     for doc in documents:
         page_number = doc["page"] if "page" in doc else None
-        text = doc["text"]
-        chunks = parse_markdown(text, chunk_options)
+        text: str = doc["text"]
+
+        if chunk_options.delimiter is None:
+            chunks = parse_markdown(text, chunk_options)
+        else:
+            chunks = []
+            # split the text using the delimiter
+            splits = text.split(chunk_options.delimiter)
+            for split in splits:
+                if len(split.strip()) == 0:
+                    continue
+                chunks.extend(parse_markdown(split, chunk_options))
 
         for chunk in chunks:
             chunk_dict = {
