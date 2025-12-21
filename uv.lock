@@ -688,7 +688,7 @@ wheels = [
 
 [[package]]
 name = "datalab-python-sdk"
-version = "0.1.13"
+version = "0.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -697,9 +697,9 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "tenacity" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/47/3e/0f8c356688f8f3c16ea6bfa21b2e5f2e04973fa91eea30f3152a0146fd41/datalab_python_sdk-0.1.13.tar.gz", hash = "sha256:9d5863f4b0d4997f4c112a71e93b14fb5dde08a9d367da8666f6d2edbe13c612", size = 1937775 }
+sdist = { url = "https://files.pythonhosted.org/packages/6c/be/604bfcc1069c78ed784528a667fb5b8b6ce6c3b4fa8b55d07c94b2750875/datalab_python_sdk-0.2.0.tar.gz", hash = "sha256:0a76ba41b73c1fd3b44f2885fd563a4f8c52b8d4cb6b6549365f7810bb5532d7", size = 1961195 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/28/7e/34afeb223316647effd9aa94270ddaff7f35130f878655cd16c42e7d4c2a/datalab_python_sdk-0.1.13-py3-none-any.whl", hash = "sha256:2547d87a53c831d65a62ecee744ba999a7b954ca000c90abbfd43175231fab85", size = 20199 },
+    { url = "https://files.pythonhosted.org/packages/fc/c2/410c88c33fd2661aaee5d86f2fd3d1a6bada6cafe59be6442b7f956eb6b6/datalab_python_sdk-0.2.0-py3-none-any.whl", hash = "sha256:7d7a27b83d2414356c1853a6a52651fc81c72e9234e174a2fc10059c527ddbe5", size = 22361 },
 ]
 
 [[package]]
@@ -4137,7 +4137,7 @@ requires-dist = [
     { name = "boto3", specifier = ">=1.40.72" },
     { name = "chonkie", extras = ["all"], specifier = ">=1.4.1" },
     { name = "cuid2", specifier = ">=2.0.1" },
-    { name = "datalab-python-sdk", specifier = ">=0.1.13" },
+    { name = "datalab-python-sdk", specifier = ">=0.2.0" },
     { name = "fastapi", extras = ["standard"], specifier = ">=0.121.1" },
     { name = "firecrawl-py", specifier = ">=4.8.0" },
     { name = "markitdown", extras = ["docx", "outlook", "pptx", "xls", "xlsx"], specifier = ">=0.1.3" },

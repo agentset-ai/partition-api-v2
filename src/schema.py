@@ -3,30 +3,19 @@ from typing import Literal
 
 
 class ParseOptions(BaseModel):
-    force_ocr: bool = False
-
-    # detect math and styles
-    format_lines: bool = False
-
-    # Strip existing OCR text from the PDF and re-run OCR. If force_ocr is set, this will be ignored.
-    strip_existing_ocr: bool = False
-
-    # Disable image extraction from the PDF. If use_llm is also set, then images will be automatically captioned.
-    disable_image_extraction: bool = False
-
-    # Disable inline math recognition in OCR.
-    disable_ocr_math: bool = False
-
-    # Significantly improves accuracy by using an LLM to enhance tables, forms, inline math, and layout detection. Will increase latency.
-    use_llm: bool = True
-
     mode: Literal["fast", "balanced", "accurate"] = "balanced"
 
-    # A custom prompt to use for block correction.
-    block_correction_prompt: str | None = None
+    # Disable image extraction from the PDF.
+    disable_image_extraction: bool = False
 
-    # Additional configuration options for marker. This should be a JSON string with key-value pairs. For example, '{"key": "value"}'. This supports these keys: ['disable_links', 'keep_pageheader_in_output', 'keep_pagefooter_in_output', 'filter_blank_pages', 'drop_repeated_text', 'layout_coverage_threshold', 'merge_threshold', 'height_tolerance', 'gap_threshold', 'image_threshold', 'min_line_length', 'level_count', 'default_level', 'no_merge_tables_across_pages', 'force_layout_block']
+    # Disable synthetic image captions/descriptions in output. Images will be rendered as plain img tags without alt text or the img-description wrapper div.
+    disable_image_captions: bool = False
+
+    # Additional configuration options for marker. This should be a JSON string with key-value pairs. For example, '{"key": "value"}'. This supports these keys: 'keep_pageheader_in_output' (bool), 'keep_pagefooter_in_output' (bool), 'keep_spreadsheet_formatting' (bool)
     additional_config: dict | None = None
+
+    # Comma-separated list of extras to enable. Currently supports: 'track_changes', 'chart_understanding', 'extract_links'.
+    extras: str | None = None
 
 
 class ChunkOptions(BaseModel):

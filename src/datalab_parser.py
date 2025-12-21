@@ -174,14 +174,10 @@ def parse_document(
 ):
     url = "https://www.datalab.to/api/v1/marker"
     form_data = {
-        "force_ocr": (None, options.force_ocr),
-        "format_lines": (None, options.format_lines),
-        "strip_existing_ocr": (None, options.strip_existing_ocr),
         "disable_image_extraction": (None, options.disable_image_extraction),
-        "disable_ocr_math": (None, options.disable_ocr_math),
-        "use_llm": (None, options.use_llm),
+        "disable_image_captions": (None, options.disable_image_captions),
+        "extras": (None, options.extras),
         "mode": (None, options.mode),
-        "block_correction_prompt": (None, options.block_correction_prompt),
         "additional_config": (
             None,
             (
