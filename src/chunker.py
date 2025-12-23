@@ -108,8 +108,7 @@ def parse_markdown(markdown: str, chunk_options: ChunkOptions):
 
     items.sort(key=lambda x: x.start_index)
 
-    final_chunks: list[dict] = []
-    sequence_number = 0
+    raw_chunks: list[str] = []
 
     for item in items:
         chunks = []
@@ -142,9 +141,43 @@ def parse_markdown(markdown: str, chunk_options: ChunkOptions):
             chunks = recursive_chunker.chunk(item.text)
 
         for chunk in chunks:
+            text = chunk.text.strip()
+            if not text:
+                continue
+            raw_chunks.append(text)
+
+    # merge consecutive small chunks that fit together
+    final_chunks: list[dict] = []
+    sequence_number = 0
+
+    for text in raw_chunks:
+        if final_chunks and len(final_chunks[-1]["text"]) + len(text) + 2 <= chunk_size:
+            # merge with previous chunk
+            final_chunks[-1]["text"] += "\n\n" + text
+        else:
+            # check if previous chunk ends with a heading - move it to current
+            if final_chunks:
+                prev_text = final_chunks[-1]["text"]
+                lines = prev_text.split("\n")
+                # find trailing heading lines
+                heading_start = len(lines)
+                for i in range(len(lines) - 1, -1, -1):
+                    if lines[i].lstrip().startswith("#"):
+                        heading_start = i
+                    elif lines[i].strip():
+                        break
+
+                if heading_start < len(lines):
+                    heading = "\n".join(lines[heading_start:])
+                    remaining = "\n".join(lines[:heading_start]).rstrip()
+                    # move heading to current chunk if remaining is non-empty
+                    if remaining:
+                        final_chunks[-1]["text"] = remaining
+                        text = heading + "\n\n" + text
+
             final_chunks.append(
                 {
-                    "text": chunk.text.strip(),
+                    "text": text,
                     "metadata": {
                         "sequence_number": sequence_number,
                     },
