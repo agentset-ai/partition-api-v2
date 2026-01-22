@@ -90,6 +90,7 @@ def parse_markdown(markdown: str, chunk_options: ChunkOptions):
     )
 
     recursive_chunker: RecursiveChunker | None = None
+    code_recursive_chunker: RecursiveChunker | None = None
     table_chunker: TableChunker | None = None
     code_chunker: CodeChunker | None = None
 
@@ -129,11 +130,11 @@ def parse_markdown(markdown: str, chunk_options: ChunkOptions):
                 chunks = code_chunker.chunk(item.content)
             except Exception as e:
                 # chunk as text via recursive chunker
-                if recursive_chunker is None:
-                    recursive_chunker = RecursiveChunker(
-                        chunk_size=chunk_size, rules=RecursiveRules
+                if code_recursive_chunker is None:
+                    code_recursive_chunker = RecursiveChunker(
+                        chunk_size=chunk_size, rules=RecursiveRules()
                     )
-                chunks = recursive_chunker.chunk(item.content)
+                chunks = code_recursive_chunker.chunk(item.content)
         else:
             if recursive_chunker is None:
                 recursive_chunker = RecursiveChunker(chunk_size=chunk_size, rules=rules)
