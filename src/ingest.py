@@ -71,9 +71,15 @@ def ingest_operation(request: IngestRequest):
         ] or payload.extension in ["csv", "tsv"]:
             result = parse_csv(payload)
             documents = [{"text": result, "page": None}]
-        elif payload.mime_type == "text/plain" or payload.extension == "txt":
+        elif payload.mime_type in [
+            "text/plain",
+            "text/markdown",
+        ] or payload.extension in ["txt", "md"]:
             documents = [
-                {"text": payload.file.getvalue().decode("utf-8"), "page": None}
+                {
+                    "text": payload.file.getvalue().decode("utf-8", errors="ignore"),
+                    "page": None,
+                }
             ]
         else:
             from markitdown import MarkItDown, StreamInfo
