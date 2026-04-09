@@ -157,8 +157,9 @@ def _get_markdown_from_job(
     pages: list[str] = re.split(_PAGE_DELIMITER_STRING, markdown)
     content_by_page: list[dict] = []
 
-    # skip the first page because it'll always be empty
-    for idx, page in enumerate(pages[1:]):
+    # when page delimiters exist, the first element is empty (content before first delimiter)
+    start_idx = 1 if len(pages) > 1 else 0
+    for idx, page in enumerate(pages[start_idx:]):
         stripped_page = page.strip()
         # check if the trimmed page is empty, if it is, skip it
         if len(stripped_page) == 0:
