@@ -70,7 +70,16 @@ def ingest_operation(request: IngestRequest):
             "text/tab-separated-values",
         ] or payload.extension in ["csv", "tsv"]:
             result = parse_csv(payload)
-            documents = [{"text": result, "page": None}]
+            documents = [
+                {
+                    "text": result,
+                    "page": None,
+                    # count usage from the original file, not the markdown table we generate from it
+                    "character_count": len(
+                        payload.file.getvalue().decode("utf-8", errors="ignore")
+                    ),
+                }
+            ]
         elif payload.mime_type in [
             "text/plain",
             "text/markdown",

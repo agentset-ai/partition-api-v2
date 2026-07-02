@@ -200,6 +200,10 @@ def chunk_documents(
 
     for doc in documents:
         page_number = doc["page"] if "page" in doc else None
+        # a document can carry the character count of its original content (e.g. the
+        # raw csv behind a generated markdown table), so usage reflects what the user
+        # uploaded instead of the characters added by pre-processing
+        character_count = doc.get("character_count")
         text: str = doc["text"]
 
         if chunk_options.delimiter is None:
@@ -213,6 +217,7 @@ def chunk_documents(
                     continue
                 chunks.extend(parse_markdown(split, chunk_options))
 
+        doc_characters = 0
         for chunk in chunks:
             chunk_dict = {
                 "id": str(uuid.uuid4()),
@@ -224,7 +229,7 @@ def chunk_documents(
                 chunk_dict["metadata"]["page_number"] = page_number
 
             total_chunks += 1
-            total_characters += len(chunk_dict["text"])
+            doc_characters += len(chunk_dict["text"])
 
             # disable batching
             if batch_size is None:
@@ -237,5 +242,9 @@ def chunk_documents(
                 else:
                     # Add to current batch
                     batches[-1].append(chunk_dict)
+
+        total_characters += (
+            character_count if character_count is not None else doc_characters
+        )
 
     return batches, total_characters, total_chunks, total_batches
