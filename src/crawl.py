@@ -1,6 +1,7 @@
 import os
 from fastapi import status
-from .app import app
+from .app import app, REGION
+from .region import function_options, is_eu
 from .notify_trigger import notify_workflow
 from .schema import CrawlRequest
 from .chunker import chunk_documents, langs
@@ -10,8 +11,12 @@ from cuid2 import cuid_wrapper
 from .s3 import upload_chunks_to_r2
 
 
-@app.function(timeout=7200)  # 2 hours
+@app.function(timeout=7200, **function_options(REGION))  # 2 hours
 def crawl_operation(request: CrawlRequest):
+    # Crawl ingestion is not available on EU
+    if is_eu():
+        return {"status": status.HTTP_403_FORBIDDEN}
+
     print("Crawl Operation:")
     print(request.model_dump_json(indent=2))
     firecrawl = Firecrawl(api_key=os.getenv("FIRECRAWL_API_KEY"))

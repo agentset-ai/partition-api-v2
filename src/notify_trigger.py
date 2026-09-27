@@ -1,6 +1,7 @@
 from fastapi.responses import JSONResponse
 import os
 import requests
+from .region import is_eu
 
 # this method will notify the trigger.dev workflow that the ingest operation has completed
 def notify_workflow(status: int, body: dict, trigger_token_id: str, trigger_access_token: str):
@@ -13,6 +14,10 @@ def notify_workflow(status: int, body: dict, trigger_token_id: str, trigger_acce
       json={"data": content}
   )
   r.raise_for_status()
+
+  # on EU the function's return value only carries the status
+  if is_eu():
+    return {"status": status}
 
   return JSONResponse(
       status_code=status,
