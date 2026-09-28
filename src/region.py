@@ -4,6 +4,8 @@ import re
 from collections.abc import Mapping
 from urllib.parse import urlparse
 
+from .errors import PartitionError
+
 REGIONS = ("us", "eu")
 
 US_APP_NAME = "agentset-ingest-v3"
@@ -140,6 +142,9 @@ def check_eu_config() -> bool:
 def log_error(message: str, error: BaseException, **ids: str | int | None) -> None:
     """Logs the error type, HTTP status and the given IDs, never the error message."""
     parts = [f"{message}: {type(error).__name__}"]
+
+    if isinstance(error, PartitionError):
+        parts.append(f"code={error.code}")
 
     response = getattr(error, "response", None)
     status_code = getattr(response, "status_code", None)

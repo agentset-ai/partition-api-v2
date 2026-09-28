@@ -8,6 +8,7 @@ from unittest.mock import patch
 import requests
 
 from src import region
+from src.errors import PartitionError
 from tests.fakes import FakeResponse
 
 OPTIONAL_KEYS = [
@@ -215,6 +216,17 @@ class LogErrorTest(unittest.TestCase):
             region.log_error("Failed", ValueError("document text"), job_id="job_1")
 
         self.assertEqual(output.getvalue().strip(), "Failed: ValueError job_id=job_1")
+
+    def test_logs_partition_error_code(self):
+        error = PartitionError("parse_failed", "Could not parse document")
+        output = io.StringIO()
+        with redirect_stdout(output):
+            region.log_error("Failed", error, document_id="doc_1")
+
+        self.assertEqual(
+            output.getvalue().strip(),
+            "Failed: PartitionError code=parse_failed document_id=doc_1",
+        )
 
 
 if __name__ == "__main__":
