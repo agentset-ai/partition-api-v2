@@ -42,8 +42,8 @@ app = modal.App(
     secrets=[
         modal.Secret.from_name(
             SECRET_NAME,
-            # FIRECRAWL_API_KEY, YOUTUBE_API_KEY, PROXY_USERNAME and PROXY_PASSWORD
-            # are optional: crawl and YouTube ingestion are disabled on EU
+            # FIRECRAWL_API_KEY (required on EU), YOUTUBE_API_KEY, PROXY_USERNAME
+            # and PROXY_PASSWORD are optional: YouTube ingestion is disabled on EU
             required_keys=required_secret_keys(REGION),
         )
     ],

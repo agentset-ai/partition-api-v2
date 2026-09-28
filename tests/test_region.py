@@ -12,7 +12,6 @@ from src.errors import PartitionError
 from tests.fakes import FakeResponse
 
 OPTIONAL_KEYS = [
-    "FIRECRAWL_API_KEY",
     "YOUTUBE_API_KEY",
     "PROXY_USERNAME",
     "PROXY_PASSWORD",
@@ -74,6 +73,7 @@ class ModalConfigTest(unittest.TestCase):
         )
         self.assertIn("AGENTSET_REGION", keys)
         self.assertIn("DATALAB_PROCESSING_LOCATION", keys)
+        self.assertIn("FIRECRAWL_API_KEY", keys)
         for key in OPTIONAL_KEYS:
             self.assertNotIn(key, keys)
 

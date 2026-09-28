@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 from fastapi.testclient import TestClient
 
 from src import web_app
-from src.schema import IngestRequest
+from src.schema import CrawlRequest, IngestRequest
 from tests.fakes import EU, US
 
 HEADERS = {"api-key": "partition_key"}
@@ -160,20 +160,47 @@ class CrawlAndYouTubeTest(WebAppTestCase):
             self.assertEqual(response.json(), {"call_id": "fc_1"})
             operation.spawn.assert_called_once()
 
-    def test_eu_returns_403(self):
-        for path, body, name, label in (
-            ("/crawl", CRAWL_BODY, "crawl_operation", "crawl"),
-            ("/youtube", YOUTUBE_BODY, "youtube_operation", "youtube"),
+    def test_eu_crawl_stores_the_request_and_spawns_with_the_job_id(self):
+        operation = spawnable("fc_1")
+        with (
+            patch.object(web_app, "crawl_operation", operation),
+            patch.object(web_app, "store_job", return_value="job_1") as store_job,
         ):
-            operation = spawnable("fc_1")
-            with patch.object(web_app, name, operation):
-                response = self.post(path, body, EU)
-            self.assertEqual(response.status_code, 403)
-            self.assertEqual(
-                response.json(),
-                {"status": 403, "message": f"{label} is not available in this region"},
-            )
-            operation.spawn.assert_not_called()
+            response = self.post("/crawl", CRAWL_BODY, EU)
+
+        self.assertEqual(response.json(), {"call_id": "fc_1"})
+        store_job.assert_called_once_with(CrawlRequest(**CRAWL_BODY))
+        operation.spawn.assert_called_once_with("job_1")
+
+    def test_eu_crawl_store_failure(self):
+        operation = spawnable("fc_1")
+        output = io.StringIO()
+        with (
+            patch.object(web_app, "crawl_operation", operation),
+            patch.object(
+                web_app, "store_job", side_effect=ConnectionError("redis down")
+            ),
+            redirect_stdout(output),
+        ):
+            response = self.post("/crawl", CRAWL_BODY, EU)
+
+        self.assertEqual(response.status_code, 503)
+        operation.spawn.assert_not_called()
+        self.assertIn(
+            "Failed to store crawl job: ConnectionError namespace_id=ns_1",
+            output.getvalue(),
+        )
+
+    def test_eu_youtube_returns_403(self):
+        operation = spawnable("fc_1")
+        with patch.object(web_app, "youtube_operation", operation):
+            response = self.post("/youtube", YOUTUBE_BODY, EU)
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(
+            response.json(),
+            {"status": 403, "message": "youtube is not available in this region"},
+        )
+        operation.spawn.assert_not_called()
 
 
 class ResultsEndpointTest(WebAppTestCase):

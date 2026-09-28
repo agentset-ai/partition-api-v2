@@ -1,7 +1,9 @@
 import os
 from fastapi import status
 from .app import app, REGION
-from .region import function_options, is_eu
+from .region import check_eu_config, function_options, is_eu, log_error
+from .errors import eu_error_body
+from .jobs import delete_job, load_job
 from .notify_trigger import notify_workflow
 from .schema import CrawlRequest
 from .chunker import chunk_documents, langs
@@ -12,13 +14,58 @@ from .s3 import upload_chunks_to_r2
 
 
 @app.function(timeout=7200, **function_options(REGION))  # 2 hours
-def crawl_operation(request: CrawlRequest):
-    # Crawl ingestion is not available on EU
+def crawl_operation(request: CrawlRequest | str):
+    # on EU the web endpoint spawns this function with a job id
     if is_eu():
-        return {"status": status.HTTP_403_FORBIDDEN}
+        return _run_eu_job(request)
 
     print("Crawl Operation:")
     print(request.model_dump_json(indent=2))
+    return _crawl(request)
+
+
+def _run_eu_job(job_id: str):
+    if not check_eu_config():
+        return {"status": status.HTTP_500_INTERNAL_SERVER_ERROR}
+
+    request: CrawlRequest | None = None
+    try:
+        request = load_job(job_id, CrawlRequest)
+        if request is None:
+            print(f"Crawl Operation: job not found job_id={job_id}")
+            return None
+
+        print(
+            f"Crawl Operation: job_id={job_id} namespace_id={request.namespace_id}"
+        )
+        return _crawl(request)
+    except Exception as e:
+        ids = {
+            "job_id": job_id,
+            "namespace_id": request.namespace_id if request else None,
+        }
+        log_error("Crawl Operation failed", e, **ids)
+        if request is not None:
+            try:
+                notify_workflow(
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    body={"message": "Failed to crawl", "code": "crawl_failed"},
+                    trigger_token_id=request.trigger_token_id,
+                    trigger_access_token=request.trigger_access_token,
+                )
+            except Exception as notify_error:
+                log_error("Failed to notify the workflow", notify_error, **ids)
+        return {"status": status.HTTP_500_INTERNAL_SERVER_ERROR}
+    finally:
+        # kept until the job has run, so a retried input can still load it
+        if request is not None:
+            try:
+                delete_job(job_id)
+            except Exception as e:
+                log_error("Failed to delete crawl job", e, job_id=job_id)
+
+
+def _crawl(request: CrawlRequest):
     firecrawl = Firecrawl(api_key=os.getenv("FIRECRAWL_API_KEY"))
     cuid_generator: Callable[[], str] = cuid_wrapper()
 
@@ -133,12 +180,18 @@ def crawl_operation(request: CrawlRequest):
             trigger_access_token=request.trigger_access_token,
         )
     except Exception as e:
-        import traceback
+        if is_eu():
+            log_error("Failed to crawl", e, namespace_id=request.namespace_id)
+            body = eu_error_body(e, "crawl_failed", "Failed to crawl")
+        else:
+            import traceback
 
-        traceback.print_exc()
+            traceback.print_exc()
+            body = {"message": str(e)}
+
         return notify_workflow(
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            body={"message": str(e)},
+            body=body,
             trigger_token_id=request.trigger_token_id,
             trigger_access_token=request.trigger_access_token,
         )

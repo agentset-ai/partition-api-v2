@@ -73,11 +73,11 @@ The EU app (`agentset-ingest-eu`) is deployed with `AGENTSET_REGION=eu` to its o
 
 On EU the service:
 
-- keeps each ingest request in Redis (`job:<id>`, expires after 3 hours) and passes only the job id to the worker, which deletes the record once the job has run
-- refuses ingest jobs (503) unless `R2_ENDPOINT_URL` is an EU jurisdiction R2 endpoint, `REDIS_HOST` is set and `DATALAB_PROCESSING_LOCATION` is `eu`
+- keeps each ingest and crawl request in Redis (`job:<id>`, expires after 3 hours) and passes only the job id to the worker, which deletes the record once the job has run
+- refuses ingest and crawl jobs (503) unless `R2_ENDPOINT_URL` is an EU jurisdiction R2 endpoint, `REDIS_HOST` is set and `DATALAB_PROCESSING_LOCATION` is `eu`
 - sets a 3-day expiry on the chunk batches it writes to Redis
 - uploads documents to Datalab's EU storage with the File Upload API, converts them with `processing_location=eu`, downloads the result from the signed `result_url` and then deletes the file from Datalab; files over 200 MB are rejected
-- returns 403 from `/crawl` and `/youtube`, and 404 from the `/ingest`, `/crawl` and `/youtube` results endpoints (`…/results/{call_id}`)
+- returns 403 from `/youtube`, and 404 from the `/ingest`, `/crawl` and `/youtube` results endpoints (`…/results/{call_id}`)
 - leaves the request input out of validation error (422) responses
 - logs IDs and error types only, and returns generic error codes to the app
 - leaves the filename out of the completion data sent to Trigger.dev
@@ -87,7 +87,7 @@ Modal stores function inputs over 2 MiB in `us-east`, so on EU the app sends tex
 
 1. Create the `eu` environment in Modal (once).
 
-2. Create the EU secret in that environment. Use the EU Redis, the EU jurisdiction R2 endpoint (`https://<account-id>.eu.r2.cloudflarestorage.com`) and EU buckets, and leave the crawl and YouTube keys unset:
+2. Create the EU secret in that environment. Use the EU Redis, the EU jurisdiction R2 endpoint (`https://<account-id>.eu.r2.cloudflarestorage.com`) and EU buckets, set the Firecrawl key (required on EU) and leave the YouTube keys unset:
 
 ```bash
 uv run modal secret create --force --env eu partitioner-secrets \
@@ -95,6 +95,7 @@ uv run modal secret create --force --env eu partitioner-secrets \
   DATALAB_PROCESSING_LOCATION=eu \
   AGENTSET_API_KEY=xxx \
   DATALAB_API_KEY=xxx \
+  FIRECRAWL_API_KEY=xxx \
   REDIS_HOST=xxx REDIS_PORT=xxx REDIS_PASSWORD=xxx \
   R2_ACCESS_KEY_ID=xxx R2_SECRET_ACCESS_KEY=xxx R2_ENDPOINT_URL=xxx \
   R2_BUCKET_NAME=xxx R2_CHUNKS_BUCKET_NAME=xxx R2_PUBLIC_URL=xxx
