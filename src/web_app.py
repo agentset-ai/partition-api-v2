@@ -119,9 +119,22 @@ async def crawl(
         )
 
     if is_eu():
-        return _not_available_in_region("crawl")
+        if not check_eu_config():
+            return _failed_to_queue()
 
-    call = crawl_operation.spawn(request)
+        # spawn inputs only carry the job id; the request is kept in Redis
+        try:
+            job_id = store_job(request)
+        except Exception as e:
+            log_error(
+                "Failed to store crawl job", e, namespace_id=request.namespace_id
+            )
+            return _failed_to_queue()
+
+        call = crawl_operation.spawn(job_id)
+    else:
+        call = crawl_operation.spawn(request)
+
     return {"call_id": call.object_id}
 
 

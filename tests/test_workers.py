@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 from fastapi.responses import JSONResponse
 
 from src import crawl, notify_trigger, s3, yt
+from src.schema import CrawlRequest
 from tests.fakes import EU, US, FakeResponse
 
 
@@ -102,19 +103,93 @@ class ImageUploadTest(unittest.TestCase):
         )
 
 
-class CrawlAndYouTubeWorkerTest(unittest.TestCase):
-    def test_eu_workers_refuse_to_run(self):
-        for operation, module in (
-            (crawl.crawl_operation, crawl),
-            (yt.youtube_operation, yt),
+class YouTubeWorkerTest(unittest.TestCase):
+    def test_eu_worker_refuses_to_run(self):
+        with (
+            patch.dict(os.environ, EU),
+            patch.object(yt, "notify_workflow") as notify,
         ):
-            with (
-                patch.dict(os.environ, EU),
-                patch.object(module, "notify_workflow") as notify,
-            ):
-                result = operation.local(MagicMock())
-            self.assertEqual(result, {"status": 403})
-            notify.assert_not_called()
+            result = yt.youtube_operation.local(MagicMock())
+        self.assertEqual(result, {"status": 403})
+        notify.assert_not_called()
+
+
+def make_crawl_request():
+    return CrawlRequest(
+        url="https://example.com/private?token=secret-value",
+        trigger_token_id="waitpoint_1",
+        trigger_access_token="token-value",
+        namespace_id="ns_1",
+    )
+
+
+class CrawlWorkerTest(unittest.TestCase):
+    def call_operation(self, arg, env, crawl_result=None, crawl_error=None):
+        firecrawl = MagicMock()
+        if crawl_error:
+            firecrawl.crawl.side_effect = crawl_error
+        else:
+            firecrawl.crawl.return_value = crawl_result or MagicMock(
+                status="completed", data=[]
+            )
+        output = io.StringIO()
+        with (
+            patch.dict(os.environ, env),
+            patch.object(crawl, "Firecrawl", return_value=firecrawl),
+            patch.object(crawl, "notify_workflow", return_value={"status": 200}) as notify,
+            patch.object(crawl, "delete_job") as delete_job,
+            redirect_stdout(output),
+        ):
+            result = crawl.crawl_operation.local(arg)
+        return result, output.getvalue(), notify, delete_job
+
+    def test_us_crawls_the_request(self):
+        _, output, notify, delete_job = self.call_operation(make_crawl_request(), US)
+
+        self.assertTrue(output.startswith("Crawl Operation:"))
+        notify.assert_called_once()
+        delete_job.assert_not_called()
+
+    def test_eu_loads_the_job_and_logs_ids_only(self):
+        page = MagicMock(markdown="# Page", metadata=MagicMock(language=None))
+        with (
+            patch.object(crawl, "load_job", return_value=make_crawl_request()) as load_job,
+            patch.object(crawl, "upload_chunks_to_r2") as upload,
+        ):
+            _, output, notify, delete_job = self.call_operation(
+                "job_1", EU, crawl_result=MagicMock(status="completed", data=[page])
+            )
+
+        load_job.assert_called_once_with("job_1", CrawlRequest)
+        upload.assert_called_once()
+        self.assertEqual(notify.call_args.kwargs["status"], 200)
+        self.assertIn("Crawl Operation: job_id=job_1 namespace_id=ns_1", output)
+        self.assertNotIn("secret-value", output)
+        self.assertNotIn("token-value", output)
+        delete_job.assert_called_once_with("job_1")
+
+    def test_eu_failure_returns_a_generic_error(self):
+        with patch.object(crawl, "load_job", return_value=make_crawl_request()):
+            _, output, notify, delete_job = self.call_operation(
+                "job_1", EU, crawl_error=RuntimeError("https://example.com/private?token=secret-value")
+            )
+
+        self.assertEqual(
+            notify.call_args.kwargs["body"],
+            {"message": "Failed to crawl", "code": "crawl_failed"},
+        )
+        self.assertIn("Failed to crawl: RuntimeError namespace_id=ns_1", output)
+        self.assertNotIn("secret-value", output)
+        delete_job.assert_called_once_with("job_1")
+
+    def test_eu_missing_job(self):
+        with patch.object(crawl, "load_job", return_value=None):
+            result, output, notify, delete_job = self.call_operation("job_1", EU)
+
+        self.assertIsNone(result)
+        notify.assert_not_called()
+        delete_job.assert_not_called()
+        self.assertIn("job not found job_id=job_1", output)
 
 
 if __name__ == "__main__":
