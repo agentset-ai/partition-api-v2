@@ -390,11 +390,16 @@ def parse_uploaded_document(
                 "upload_failed", "Could not upload document for parsing"
             )
 
-        form_data = _form_data(upload["reference"], options)
-        form_data["processing_location"] = (None, processing_location)
+        # Datalab rejects multipart requests when processing_location is set,
+        # so the fields are sent url-encoded
+        form_data = {
+            key: value
+            for key, (_, value) in _form_data(upload["reference"], options).items()
+        }
+        form_data["processing_location"] = processing_location
         response = _session.post(
             f"{_DATALAB_API_URL}/convert",
-            files=form_data,
+            data=form_data,
             headers=_headers,
             timeout=_API_TIMEOUT,
         )

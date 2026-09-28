@@ -175,11 +175,13 @@ class ParseUploadedDocumentTest(unittest.TestCase):
         self.assertEqual(
             (convert["method"], convert["url"]), ("POST", f"{API}/convert")
         )
-        self.assertEqual(convert["files"]["file_url"], (None, "datalab://file-abc"))
-        self.assertEqual(convert["files"]["processing_location"], (None, "eu"))
-        self.assertEqual(convert["files"]["output_format"], (None, "markdown"))
-        self.assertEqual(convert["files"]["mode"], (None, "accurate"))
-        self.assertEqual(convert["files"]["paginate"], (None, True))
+        # url-encoded: Datalab rejects multipart with processing_location
+        self.assertNotIn("files", convert)
+        self.assertEqual(convert["data"]["file_url"], "datalab://file-abc")
+        self.assertEqual(convert["data"]["processing_location"], "eu")
+        self.assertEqual(convert["data"]["output_format"], "markdown")
+        self.assertEqual(convert["data"]["mode"], "accurate")
+        self.assertEqual(convert["data"]["paginate"], True)
 
         for poll in (poll_1, poll_2):
             self.assertEqual(
