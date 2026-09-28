@@ -3,6 +3,7 @@ import base64
 from uuid import uuid4
 import json
 import os
+from .region import is_eu, log_error
 
 # Initialize S3 client for Cloudflare R2
 _s3_client = boto3.client(
@@ -53,16 +54,31 @@ def upload_image_to_r2(
         # Create hierarchical key structure
         key = f"namespaces/{namespace_id}/documents/{document_id}/{unique_image_name}"
 
+        # keep EU images out of CDN edge caches
+        cache_control = {"CacheControl": "no-store"} if is_eu() else {}
+
         # Upload to R2
         _s3_client.put_object(
-            Bucket=_r2_bucket, Key=key, Body=image_data, ContentType=content_type
+            Bucket=_r2_bucket,
+            Key=key,
+            Body=image_data,
+            ContentType=content_type,
+            **cache_control,
         )
 
         # Return the public URL
         public_url = f"{_r2_public_url.rstrip('/')}/{key}"
         return public_url
     except Exception as e:
-        print(f"Error uploading image {image_filename}: {str(e)}")
+        if is_eu():
+            log_error(
+                "Error uploading image",
+                e,
+                namespace_id=namespace_id,
+                document_id=document_id,
+            )
+        else:
+            print(f"Error uploading image {image_filename}: {str(e)}")
         # Return a placeholder if upload fails
         return f"#failed-to-upload-{image_filename}"
 

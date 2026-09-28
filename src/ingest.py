@@ -1,9 +1,10 @@
-import os
 from fastapi import status
-from .app import app
+from .app import app, REGION
 from .notify_trigger import notify_workflow
 from .datalab_parser import (
     parse_document,
+    parse_uploaded_document,
+    uses_datalab_file_upload,
     DATALAB_SUPPORTED_MIME_TYPES,
     DATALAB_SUPPORTED_EXTENSIONS,
     PAGED_MIME_TYPES,
@@ -13,17 +14,77 @@ from .schema import IngestRequest
 from .file_type import extract_file_from_request
 from .chunker import chunk_documents
 from .s3 import upload_chunks_to_r2
-from redis import Redis
+from .redis_client import get_redis
 from .csv_parser import parse_csv
+from .jobs import delete_job, load_job
+from .region import check_eu_config, function_options, is_eu, log_error
+from .errors import eu_error_body
 import uuid
 import json
 
+# chunk batches are deleted by the app once embedded; on EU they also expire
+EU_BATCH_TTL_SECONDS = 3 * 24 * 60 * 60  # 3 days
 
-@app.function(timeout=7200)  # 2 hours
-def ingest_operation(request: IngestRequest):
+
+@app.function(timeout=7200, **function_options(REGION))  # 2 hours
+def ingest_operation(request: IngestRequest | str):
+    # on EU the web endpoint spawns this function with a job id
+    if is_eu():
+        return _run_eu_job(request)
+
     print("Ingest Operation:")
     print(request.model_dump_json(indent=2))
+    return _ingest(request)
 
+
+def _run_eu_job(job_id: str):
+    if not check_eu_config():
+        return {"status": status.HTTP_500_INTERNAL_SERVER_ERROR}
+
+    request: IngestRequest | None = None
+    try:
+        request = load_job(job_id, IngestRequest)
+        if request is None:
+            print(f"Ingest Operation: job not found job_id={job_id}")
+            return None
+
+        print(
+            f"Ingest Operation: job_id={job_id} namespace_id={request.namespace_id} document_id={request.document_id}"
+        )
+        return _ingest(request)
+    except Exception as e:
+        ids = {
+            "job_id": job_id,
+            "namespace_id": request.namespace_id if request else None,
+            "document_id": request.document_id if request else None,
+        }
+        log_error("Ingest Operation failed", e, **ids)
+        if request is not None:
+            _notify_failure(request, **ids)
+        return {"status": status.HTTP_500_INTERNAL_SERVER_ERROR}
+    finally:
+        # kept until the job has run, so a retried input can still load it
+        if request is not None:
+            try:
+                delete_job(job_id)
+            except Exception as e:
+                log_error("Failed to delete ingest job", e, job_id=job_id)
+
+
+def _notify_failure(request: IngestRequest, **ids: str | None):
+    """Best-effort: completes the waitpoint with a generic error."""
+    try:
+        notify_workflow(
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            body={"message": "Failed to process document", "code": "processing_failed"},
+            trigger_token_id=request.trigger_token_id,
+            trigger_access_token=request.trigger_access_token,
+        )
+    except Exception as e:
+        log_error("Failed to notify the workflow", e, **ids)
+
+
+def _ingest(request: IngestRequest):
     # Count how many input sources are provided
     input_sources = sum(1 for x in [request.url, request.text] if x is not None)
     if input_sources != 1:
@@ -37,9 +98,20 @@ def ingest_operation(request: IngestRequest):
     try:
         payload = extract_file_from_request(request)
     except Exception as e:
+        if is_eu():
+            log_error(
+                "Failed to download file",
+                e,
+                namespace_id=request.namespace_id,
+                document_id=request.document_id,
+            )
+            body = {"message": "Failed to download file", "code": "download_failed"}
+        else:
+            body = {"message": f"Failed to download file: {str(e)}"}
+
         return notify_workflow(
             status=status.HTTP_400_BAD_REQUEST,
-            body={"message": f"Failed to download file: {str(e)}"},
+            body=body,
             trigger_token_id=request.trigger_token_id,
             trigger_access_token=request.trigger_access_token,
         )
@@ -53,12 +125,20 @@ def ingest_operation(request: IngestRequest):
             (payload.mime_type in DATALAB_SUPPORTED_MIME_TYPES)
             or (payload.extension in DATALAB_SUPPORTED_EXTENSIONS)
         ):
-            result = parse_document(
-                file_url=request.url,
-                options=request.parse_options,
-                namespace_id=request.namespace_id,
-                document_id=request.document_id,
-            )
+            if uses_datalab_file_upload():
+                result = parse_uploaded_document(
+                    file=payload,
+                    options=request.parse_options,
+                    namespace_id=request.namespace_id,
+                    document_id=request.document_id,
+                )
+            else:
+                result = parse_document(
+                    file_url=request.url,
+                    options=request.parse_options,
+                    namespace_id=request.namespace_id,
+                    document_id=request.document_id,
+                )
             documents = result.pages
             if (
                 payload.mime_type in PAGED_MIME_TYPES
@@ -124,20 +204,20 @@ def ingest_operation(request: IngestRequest):
             "batch_template": batch_template,
         }
 
+        if is_eu():
+            # the app already has the filename; keep it out of the completion data
+            del result["metadata"]["filename"]
+
         if total_pages is not None:
             result["total_pages"] = total_pages
 
-        redis_client = Redis(
-            host=os.getenv("REDIS_HOST"),
-            port=os.getenv("REDIS_PORT"),
-            password=os.getenv("REDIS_PASSWORD"),
-            ssl=True,
-        )
+        redis_client = get_redis()
+        batch_ttl = {"ex": EU_BATCH_TTL_SECONDS} if is_eu() else {}
 
         # Store each batch in Redis with the specified key format
         for batch_idx, batch in enumerate(batches):
             redis_key = batch_template.replace("[BATCH_INDEX]", str(batch_idx))
-            redis_client.set(redis_key, json.dumps(batch))
+            redis_client.set(redis_key, json.dumps(batch), **batch_ttl)
 
         # upload the result
         upload_chunks_to_r2(
@@ -159,12 +239,23 @@ def ingest_operation(request: IngestRequest):
             trigger_access_token=request.trigger_access_token,
         )
     except Exception as e:
-        import traceback
+        if is_eu():
+            log_error(
+                "Failed to process document",
+                e,
+                namespace_id=request.namespace_id,
+                document_id=request.document_id,
+            )
+            body = eu_error_body(e, "processing_failed", "Failed to process document")
+        else:
+            import traceback
 
-        traceback.print_exc()
+            traceback.print_exc()
+            body = {"message": str(e)}
+
         return notify_workflow(
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            body={"message": str(e)},
+            body=body,
             trigger_token_id=request.trigger_token_id,
             trigger_access_token=request.trigger_access_token,
         )

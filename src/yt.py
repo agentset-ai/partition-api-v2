@@ -1,5 +1,6 @@
 from fastapi import status
-from .app import app
+from .app import app, REGION
+from .region import function_options, is_eu
 from .notify_trigger import notify_workflow
 from .schema import YouTubeRequest
 from .chunker import chunk_documents
@@ -16,8 +17,12 @@ from .s3 import upload_chunks_to_r2
 yt_converter = YouTubeConverter()
 
 
-@app.function(timeout=7200)  # 2 hours
+@app.function(timeout=7200, **function_options(REGION))  # 2 hours
 def youtube_operation(request: YouTubeRequest):
+    # YouTube ingestion is not available on EU
+    if is_eu():
+        return {"status": status.HTTP_403_FORBIDDEN}
+
     print("YT Operation:")
     print(request.model_dump_json(indent=2))
     cuid_generator: Callable[[], str] = cuid_wrapper()

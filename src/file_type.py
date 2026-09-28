@@ -5,12 +5,18 @@ import requests
 from .filename import extract_filename_from_headers
 from dataclasses import dataclass
 from typing import Optional
+from .region import is_eu
 
 
 def detect_mimetype(file: BytesIO) -> str:
     file_head = file.read(8192)
     mime_type = magic.from_buffer(file_head, mime=True)
     return mime_type.lower()
+
+
+def normalize_mime_type(content_type: str) -> str:
+    # "text/plain; charset=utf-8" -> "text/plain"
+    return content_type.split(";")[0].strip().lower()
 
 
 @dataclass
@@ -43,6 +49,10 @@ def extract_file_from_request(request: IngestRequest) -> ExtractedFile:
         if not file_name:
             file_name = extract_filename_from_headers(response.headers)
         mime_type = response.headers.get("Content-Type")
+        # on EU, text documents arrive as a URL to a .txt object and must be
+        # handled exactly like inline text
+        if mime_type and is_eu():
+            mime_type = normalize_mime_type(mime_type) or None
     else:
         text_bytes = request.text.encode("utf-8")
         size_in_bytes = len(text_bytes)
